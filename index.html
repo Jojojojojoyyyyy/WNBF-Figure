@@ -152,6 +152,7 @@
   .src{font-size:.55rem;font-weight:800;padding:2px 6px;border-radius:5px;flex:none;white-space:nowrap}
   .src.ev{background:var(--ind-s);color:var(--ind)}.src.home{background:var(--rose-s);color:var(--rose)}
   .src.sl{background:var(--teal-s);color:#06876f}.src.me{background:var(--amber-s);color:#b5760a}.src.lf{background:#EEF1F7;color:var(--soft)}
+  .src.st{background:var(--rose-s);color:var(--rose)}
   .srow .sv{font-size:.74rem;color:var(--soft);flex:1}.srow .sv b{color:var(--ink);font-weight:700}
   .srow .del{border:none;background:none;color:#c2ccda;font-size:1.15rem;cursor:pointer;padding:2px 6px;line-height:1}
   .bkrow{display:flex;gap:10px}
@@ -290,6 +291,7 @@
 
   <div class="statseg" id="statTabs">
     <button class="on" data-stat="weight">Weight</button>
+    <button data-stat="steps">Steps</button>
     <button data-stat="sleep">Sleep &amp; HR</button>
     <button data-stat="measure">Measurements</button>
     <button data-stat="lifts">Lifts</button>
@@ -314,6 +316,16 @@
       </div>
       <div class="statform" style="margin-top:9px"><label>TEE (kcal)<input type="number" step="1" id="e_tee" inputmode="numeric"></label></div>
       <button class="addbtn" id="addEvolt">Add EVOLT entry</button>
+    </div>
+  </div>
+
+  <!-- STEPS PANEL -->
+  <div id="panel-steps" class="statpanel" style="display:none">
+    <div class="card"><div id="chartSteps"></div><div id="chartmetaSteps" class="chmeta"></div></div>
+    <div class="card" style="border-top:3px solid var(--rose)">
+      <h3 style="font-size:.96rem;margin-bottom:9px">👣 Daily steps <span style="font-weight:600;color:var(--soft);font-size:.74rem">· lock in once a day</span></h3>
+      <div class="qadd"><input type="date" id="st_date"><input type="number" step="1" id="st_steps" inputmode="numeric" placeholder="steps"><button id="addSteps">Log</button></div>
+      <p class="sub" style="margin:9px 0 0">Target today: <b id="stepsTargetTxt">—</b></p>
     </div>
   </div>
 
@@ -441,8 +453,9 @@ document.getElementById('hMeta').innerHTML='<div class="pill">Time<b>'+tp.time+'
 
 function renderSummary(){
   var td=todayKey();
-  var stepsRow=(S.get('cardio',[])||[]).filter(function(c){return c.date===td});
-  document.getElementById('sumSteps').innerHTML=tp.steps.indexOf(',')>-1||tp.steps.indexOf('–')>-1?tp.steps.replace(' ','<br>'):tp.steps;
+  var loggedStep=(S.get('steps',[])||[]).filter(function(s){return s.date===td})[0];
+  if(loggedStep&&loggedStep.steps!=null){document.getElementById('sumSteps').innerHTML=loggedStep.steps.toLocaleString()+'<small> logged</small>';}
+  else{document.getElementById('sumSteps').innerHTML=(tp.steps.indexOf(',')>-1||tp.steps.indexOf('–')>-1?tp.steps.replace(' ','<br>'):tp.steps);}
   var sl=(S.get('sleep',[])||[]).filter(function(s){return s.date===td})[0];
   document.getElementById('sumSleep').innerHTML=sl&&sl.hrs!=null?sl.hrs+'<small> hrs</small>':'<small>not logged</small>';
   document.getElementById('sumHR').innerHTML=sl&&sl.hr!=null?sl.hr+'<small> bpm</small>':'<small>not logged</small>';
@@ -599,6 +612,8 @@ document.querySelectorAll('#statTabs button').forEach(function(b){
     if(b.dataset.stat==='lifts')renderLiftHistory();
     if(b.dataset.stat==='cardio')renderCardioHistory();
     if(b.dataset.stat==='measure')renderMeasureChart();
+    if(b.dataset.stat==='steps')renderStepsChart();
+    renderList();
   };
 });
 
@@ -613,6 +628,7 @@ if(S.get('evolt',null)==null){S.set('evolt',[
 if(S.get('daily',null)==null)S.set('daily',[]);
 if(S.get('sleep',null)==null)S.set('sleep',[]);
 if(S.get('measurements',null)==null)S.set('measurements',[]);
+if(S.get('steps',null)==null)S.set('steps',[]);
 
 function lineChart(elId,legId,metaId,series,unit,name){
   var el=document.getElementById(elId),lg=legId?document.getElementById(legId):null,meta=document.getElementById(metaId);
@@ -660,10 +676,11 @@ function renderList(){
   S.get('evolt',[]).forEach(function(d){all.push({date:d.date,src:'ev',txt:(d.wt!=null?d.wt:'—')+'kg · BF '+(d.bf!=null?d.bf:'—')+'% · SMM '+(d.smm!=null?d.smm:'—')+(d.tee?' · TEE '+d.tee:'')})});
   S.get('sleep',[]).forEach(function(d){all.push({date:d.date,src:'sl',txt:(d.hrs!=null?d.hrs+'h sleep':'')+(d.hr!=null?' · '+d.hr+' bpm':'')})});
   S.get('measurements',[]).forEach(function(d){all.push({date:d.date,src:'me',txt:'measurements logged'})});
+  S.get('steps',[]).forEach(function(d){all.push({date:d.date,src:'st',txt:d.steps+' steps'})});
   S.get('lifts',[]).forEach(function(d){all.push({date:d.date,src:'lf',txt:d.ex+' · '+d.sets.length+' set'+(d.sets.length>1?'s':'')})});
   all.sort(function(a,b){return a.date<b.date?1:a.date>b.date?-1:0});
   if(!all.length){el.innerHTML='<div style="padding:16px;text-align:center;color:var(--soft);font-size:.8rem">No entries yet.</div>';return;}
-  var lbl={home:'HOME',ev:'EVOLT',sl:'SLEEP',me:'MEAS',lf:'LIFT'};
+  var lbl={home:'HOME',ev:'EVOLT',sl:'SLEEP',me:'MEAS',lf:'LIFT',st:'STEPS'};
   el.innerHTML=all.slice(0,60).map(function(d){return '<div class="srow"><div class="sd">'+d.date.slice(5)+'</div><span class="src '+d.src+'">'+lbl[d.src]+'</span><div class="sv">'+d.txt+'</div></div>';}).join('');
 }
 (function(){var dd=document.getElementById('d_date');if(dd)dd.value=todayKey();var ed=document.getElementById('e_date');if(ed)ed.value=todayKey();var sd=document.getElementById('s_date');if(sd)sd.value=todayKey();var md=document.getElementById('m_date');if(md)md.value=todayKey();})();
@@ -695,6 +712,24 @@ document.getElementById('addSleep').onclick=function(){
   renderSleepChart();renderList();renderSummary();
 };
 renderSleepChart();
+
+/* ---- STEPS ---- */
+function renderStepsChart(){
+  var st=sbd(S.get('steps',[]));
+  lineChart('chartSteps',null,'chartmetaSteps',[{pts:st.filter(function(d){return d.steps!=null}).map(function(d){return{date:d.date,v:d.steps}}),color:'#FF3F6C',kind:'line',label:'Steps'}],'','Steps');
+}
+(function(){var sd=document.getElementById('st_date');if(sd)sd.value=todayKey();var tt=document.getElementById('stepsTargetTxt');if(tt)tt.textContent=tp.steps;})();
+document.getElementById('addSteps').onclick=function(){
+  var date=document.getElementById('st_date').value||todayKey();
+  var steps=parseInt(document.getElementById('st_steps').value,10);
+  if(isNaN(steps))return;
+  var a=S.get('steps',[]).filter(function(x){return x.date!==date});
+  a.push({date:date,steps:steps});
+  S.set('steps',a);
+  document.getElementById('st_steps').value='';
+  renderStepsChart();renderList();renderSummary();
+};
+renderStepsChart();
 
 /* ---- MEASUREMENTS ---- */
 var curMeasure='waist';
@@ -759,7 +794,7 @@ document.getElementById('exportBtn').onclick=function(){var all={};for(var i=0;i
 document.getElementById('importFile').onchange=function(e){var f=e.target.files[0];if(!f)return;var r=new FileReader();r.onload=function(){try{var o=JSON.parse(r.result);Object.keys(o).forEach(function(k){localStorage.setItem(k,o[k]);});location.reload();}catch(err){alert('Could not read that backup file.');}};r.readAsText(f);};
 
 /* ---- TABS ---- */
-document.querySelectorAll('.tab').forEach(function(t){t.onclick=function(){document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('on')});document.querySelectorAll('.screen').forEach(function(x){x.classList.remove('active')});t.classList.add('on');document.getElementById('s-'+t.dataset.tab).classList.add('active');window.scrollTo(0,0);};});
+document.querySelectorAll('.tab').forEach(function(t){t.onclick=function(){document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('on')});document.querySelectorAll('.screen').forEach(function(x){x.classList.remove('active')});t.classList.add('on');document.getElementById('s-'+t.dataset.tab).classList.add('active');if(t.dataset.tab==='stats'){renderList();renderChart();}window.scrollTo(0,0);};});
 </script>
 </body>
 </html>
